@@ -30,6 +30,15 @@ const orderItemSchema = new mongoose.Schema(
       required: true,
       min: 1,
     },
+
+    // ==========================================
+    // SELECTED PRODUCT SIZE
+    // ==========================================
+    selectedSize: {
+      type: String,
+      default: null,
+      trim: true,
+    },
   },
   {
     _id: false,
@@ -51,7 +60,8 @@ const orderSchema = new mongoose.Schema(
         validator: function (items) {
           return Array.isArray(items) && items.length > 0;
         },
-        message: "Order must contain at least one product",
+        message:
+          "Order must contain at least one product",
       },
     },
 
@@ -145,4 +155,7 @@ const orderSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("Order", orderSchema);
+module.exports = mongoose.model(
+  "Order",
+  orderSchema
+);

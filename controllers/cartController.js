@@ -1,23 +1,48 @@
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
 
-// Add product to cart
+// ==========================================
+// ADD PRODUCT TO CART
+// ==========================================
 const addToCart = async (req, res) => {
   try {
-    const { productId, quantity = 1 } = req.body;
+    const {
+      productId,
+      quantity = 1,
+      selectedSize,
+    } = req.body;
 
+    // ------------------------------------------
+    // VALIDATE PRODUCT ID
+    // ------------------------------------------
     if (!productId) {
       return res.status(400).json({
         message: "Product ID is required",
       });
     }
 
+    // ------------------------------------------
+    // VALIDATE QUANTITY
+    // ------------------------------------------
     if (quantity < 1) {
       return res.status(400).json({
         message: "Quantity must be at least 1",
       });
     }
 
+    // ------------------------------------------
+    // NORMALIZE SELECTED SIZE
+    // ------------------------------------------
+    const normalizedSize =
+      selectedSize !== undefined &&
+      selectedSize !== null &&
+      String(selectedSize).trim() !== ""
+        ? String(selectedSize).trim()
+        : null;
+
+    // ------------------------------------------
+    // FIND PRODUCT
+    // ------------------------------------------
     const product = await Product.findById(productId);
 
     if (!product) {
@@ -26,41 +51,100 @@ const addToCart = async (req, res) => {
       });
     }
 
+    // ------------------------------------------
+    // IF PRODUCT HAS SIZES, SIZE IS REQUIRED
+    // ------------------------------------------
+    const productSizes = Array.isArray(product.sizes)
+      ? product.sizes.filter(
+          (size) =>
+            size !== null &&
+            size !== undefined &&
+            String(size).trim() !== ""
+        )
+      : [];
+
+    if (productSizes.length > 0 && !normalizedSize) {
+      return res.status(400).json({
+        message: "Please select a size",
+      });
+    }
+
+    // ------------------------------------------
+    // FIND USER CART
+    // ------------------------------------------
     let cart = await Cart.findOne({
       user: req.user._id,
     });
 
+    // ------------------------------------------
+    // CREATE NEW CART
+    // ------------------------------------------
     if (!cart) {
       cart = new Cart({
         user: req.user._id,
+
         items: [
           {
             product: productId,
             quantity,
+            selectedSize: normalizedSize,
           },
         ],
       });
-    } else {
-      const existingItem = cart.items.find(
-        (item) => item.product.toString() === productId
-      );
+    }
 
+    // ------------------------------------------
+    // EXISTING CART
+    // ------------------------------------------
+    else {
+      // Same product + same size = same cart item
+      const existingItem = cart.items.find((item) => {
+        const itemSize =
+          item.selectedSize !== undefined &&
+          item.selectedSize !== null
+            ? String(item.selectedSize).trim()
+            : null;
+
+        return (
+          item.product.toString() === productId &&
+          itemSize === normalizedSize
+        );
+      });
+
+      // ------------------------------------------
+      // EXISTING PRODUCT + SAME SIZE
+      // ------------------------------------------
       if (existingItem) {
         existingItem.quantity += quantity;
-      } else {
+      }
+
+      // ------------------------------------------
+      // SAME PRODUCT BUT DIFFERENT SIZE
+      // ------------------------------------------
+      else {
         cart.items.push({
           product: productId,
           quantity,
+          selectedSize: normalizedSize,
         });
       }
     }
 
+    // ------------------------------------------
+    // SAVE CART
+    // ------------------------------------------
     await cart.save();
 
-    const updatedCart = await Cart.findById(cart._id).populate(
-      "items.product"
-    );
+    // ------------------------------------------
+    // GET UPDATED CART
+    // ------------------------------------------
+    const updatedCart = await Cart.findById(
+      cart._id
+    ).populate("items.product");
 
+    // ------------------------------------------
+    // SUCCESS RESPONSE
+    // ------------------------------------------
     res.status(200).json({
       message: "Product added to cart successfully",
       cart: updatedCart,
@@ -75,7 +159,9 @@ const addToCart = async (req, res) => {
   }
 };
 
-// Get logged-in user's cart
+// ==========================================
+// GET LOGGED-IN USER'S CART
+// ==========================================
 const getCart = async (req, res) => {
   try {
     const cart = await Cart.findOne({
@@ -100,10 +186,16 @@ const getCart = async (req, res) => {
   }
 };
 
-// Update product quantity
+// ==========================================
+// UPDATE PRODUCT QUANTITY
+// ==========================================
 const updateCartItem = async (req, res) => {
   try {
-    const { productId, quantity } = req.body;
+    const {
+      productId,
+      quantity,
+      selectedSize,
+    } = req.body;
 
     if (!productId || quantity === undefined) {
       return res.status(400).json({
@@ -127,9 +219,31 @@ const updateCartItem = async (req, res) => {
       });
     }
 
-    const item = cart.items.find(
-      (item) => item.product.toString() === productId
-    );
+    // ------------------------------------------
+    // NORMALIZE SIZE
+    // ------------------------------------------
+    const normalizedSize =
+      selectedSize !== undefined &&
+      selectedSize !== null &&
+      String(selectedSize).trim() !== ""
+        ? String(selectedSize).trim()
+        : null;
+
+    // ------------------------------------------
+    // FIND PRODUCT + SIZE
+    // ------------------------------------------
+    const item = cart.items.find((item) => {
+      const itemSize =
+        item.selectedSize !== undefined &&
+        item.selectedSize !== null
+          ? String(item.selectedSize).trim()
+          : null;
+
+      return (
+        item.product.toString() === productId &&
+        itemSize === normalizedSize
+      );
+    });
 
     if (!item) {
       return res.status(404).json({
@@ -141,9 +255,9 @@ const updateCartItem = async (req, res) => {
 
     await cart.save();
 
-    const updatedCart = await Cart.findById(cart._id).populate(
-      "items.product"
-    );
+    const updatedCart = await Cart.findById(
+      cart._id
+    ).populate("items.product");
 
     res.status(200).json({
       message: "Cart quantity updated successfully",
@@ -159,10 +273,13 @@ const updateCartItem = async (req, res) => {
   }
 };
 
-// Remove product from cart
+// ==========================================
+// REMOVE PRODUCT FROM CART
+// ==========================================
 const removeFromCart = async (req, res) => {
   try {
     const { productId } = req.params;
+    const { selectedSize } = req.query;
 
     const cart = await Cart.findOne({
       user: req.user._id,
@@ -174,9 +291,31 @@ const removeFromCart = async (req, res) => {
       });
     }
 
-    const itemExists = cart.items.some(
-      (item) => item.product.toString() === productId
-    );
+    // ------------------------------------------
+    // NORMALIZE SIZE
+    // ------------------------------------------
+    const normalizedSize =
+      selectedSize !== undefined &&
+      selectedSize !== null &&
+      String(selectedSize).trim() !== ""
+        ? String(selectedSize).trim()
+        : null;
+
+    // ------------------------------------------
+    // CHECK ITEM
+    // ------------------------------------------
+    const itemExists = cart.items.some((item) => {
+      const itemSize =
+        item.selectedSize !== undefined &&
+        item.selectedSize !== null
+          ? String(item.selectedSize).trim()
+          : null;
+
+      return (
+        item.product.toString() === productId &&
+        itemSize === normalizedSize
+      );
+    });
 
     if (!itemExists) {
       return res.status(404).json({
@@ -184,15 +323,27 @@ const removeFromCart = async (req, res) => {
       });
     }
 
-    cart.items = cart.items.filter(
-      (item) => item.product.toString() !== productId
-    );
+    // ------------------------------------------
+    // REMOVE PRODUCT + SIZE MATCH
+    // ------------------------------------------
+    cart.items = cart.items.filter((item) => {
+      const itemSize =
+        item.selectedSize !== undefined &&
+        item.selectedSize !== null
+          ? String(item.selectedSize).trim()
+          : null;
+
+      return !(
+        item.product.toString() === productId &&
+        itemSize === normalizedSize
+      );
+    });
 
     await cart.save();
 
-    const updatedCart = await Cart.findById(cart._id).populate(
-      "items.product"
-    );
+    const updatedCart = await Cart.findById(
+      cart._id
+    ).populate("items.product");
 
     res.status(200).json({
       message: "Product removed from cart successfully",
@@ -208,7 +359,9 @@ const removeFromCart = async (req, res) => {
   }
 };
 
-// Clear entire cart
+// ==========================================
+// CLEAR ENTIRE CART
+// ==========================================
 const clearCart = async (req, res) => {
   try {
     const cart = await Cart.findOne({

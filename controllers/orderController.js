@@ -181,6 +181,16 @@ const placeOrder = async (req, res) => {
 
       const quantity = Number(item.quantity || 1);
 
+      // ------------------------------------------
+      // SELECTED SIZE
+      // ------------------------------------------
+      const selectedSize =
+        item.selectedSize !== undefined &&
+        item.selectedSize !== null &&
+        String(item.selectedSize).trim() !== ""
+          ? String(item.selectedSize).trim()
+          : null;
+
       if (Number.isNaN(price) || price < 0) {
         return res.status(400).json({
           success: false,
@@ -204,12 +214,16 @@ const placeOrder = async (req, res) => {
         item.image ||
         "";
 
+      // ------------------------------------------
+      // ADD ITEM TO ORDER
+      // ------------------------------------------
       orderItems.push({
         product: productFromDatabase._id,
         title,
         image,
         price,
         quantity,
+        selectedSize,
       });
     }
 

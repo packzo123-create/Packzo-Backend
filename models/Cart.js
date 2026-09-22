@@ -14,6 +14,15 @@ const cartItemSchema = new mongoose.Schema(
       min: 1,
       default: 1,
     },
+
+    // ==========================================
+    // SELECTED PRODUCT SIZE
+    // ==========================================
+    selectedSize: {
+      type: String,
+      default: null,
+      trim: true,
+    },
   },
   {
     _id: false,
