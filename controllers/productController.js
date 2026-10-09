@@ -358,118 +358,80 @@ const getProducts = async (req, res) => {
       minPrice,
       maxPrice,
       page = 1,
-      limit = 10,
+      limit = 1000,
     } = req.query;
 
     const query = {
       isActive: true,
     };
 
-    // ==========================================
     // SEARCH
-    // ==========================================
-    if (search && search.trim()) {
-      const searchValue = escapeRegex(
-        search.trim()
-      );
+    if (search && String(search).trim()) {
+      const searchValue = escapeRegex(String(search).trim());
 
       query.$or = [
-        {
-          name: {
-            $regex: searchValue,
-            $options: "i",
-          },
-        },
-        {
-          description: {
-            $regex: searchValue,
-            $options: "i",
-          },
-        },
-        {
-          brand: {
-            $regex: searchValue,
-            $options: "i",
-          },
-        },
-        {
-          category: {
-            $regex: searchValue,
-            $options: "i",
-          },
-        },
-        {
-          subcategory: {
-            $regex: searchValue,
-            $options: "i",
-          },
-        },
+        { name: { $regex: searchValue, $options: "i" } },
+        { description: { $regex: searchValue, $options: "i" } },
+        { brand: { $regex: searchValue, $options: "i" } },
+        { category: { $regex: searchValue, $options: "i" } },
+        { subcategory: { $regex: searchValue, $options: "i" } },
       ];
     }
 
-    // ==========================================
     // CATEGORY FILTER
-    // ==========================================
-    if (category && category.trim()) {
+    if (category && String(category).trim()) {
       query.category = {
-        $regex: `^${escapeRegex(
-          category.trim()
-        )}$`,
+        $regex: `^${escapeRegex(String(category).trim())}$`,
         $options: "i",
       };
     }
 
-    // ==========================================
     // SUBCATEGORY FILTER
-    // ==========================================
-    if (subcategory && subcategory.trim()) {
+    if (subcategory && String(subcategory).trim()) {
       query.subcategory = {
-        $regex: `^${escapeRegex(
-          subcategory.trim()
-        )}$`,
+        $regex: `^${escapeRegex(String(subcategory).trim())}$`,
         $options: "i",
       };
     }
 
-    // ==========================================
     // PRICE FILTER
-    // ==========================================
-    if (minPrice || maxPrice) {
+    if (
+      (minPrice !== undefined && minPrice !== "") ||
+      (maxPrice !== undefined && maxPrice !== "")
+    ) {
       query.price = {};
 
-      if (
-        minPrice !== undefined &&
-        minPrice !== ""
-      ) {
-        query.price.$gte = Number(minPrice);
+      if (minPrice !== undefined && minPrice !== "") {
+        const parsedMinPrice = Number(minPrice);
+        if (Number.isFinite(parsedMinPrice)) {
+          query.price.$gte = parsedMinPrice;
+        }
       }
 
-      if (
-        maxPrice !== undefined &&
-        maxPrice !== ""
-      ) {
-        query.price.$lte = Number(maxPrice);
+      if (maxPrice !== undefined && maxPrice !== "") {
+        const parsedMaxPrice = Number(maxPrice);
+        if (Number.isFinite(parsedMaxPrice)) {
+          query.price.$lte = parsedMaxPrice;
+        }
+      }
+
+      // Avoid an empty price query if supplied values were invalid.
+      if (Object.keys(query.price).length === 0) {
+        delete query.price;
       }
     }
 
-    // ==========================================
     // PAGINATION
-    // ==========================================
-    const currentPage = Math.max(
-      Number(page) || 1,
-      1
+    const currentPage = Math.max(Number.parseInt(page, 10) || 1, 1);
+    const requestedLimit = Number.parseInt(limit, 10);
+    // Return up to 1000 products per request; retain pagination for larger catalogs.
+    const productsLimit = Math.min(
+      Math.max(requestedLimit || 1000, 1),
+      1000
     );
+    const skip = (currentPage - 1) * productsLimit;
 
-    const productsLimit = Math.max(
-      Number(limit) || 10,
-      1
-    );
-
-    const skip =
-      (currentPage - 1) * productsLimit;
-
-    const totalProducts =
-      await Product.countDocuments(query);
+    const totalProducts = await Product.countDocuments(query);
 
     const products = await Product.find(query)
       .populate("seller", "name email")
@@ -477,9 +439,7 @@ const getProducts = async (req, res) => {
       .skip(skip)
       .limit(productsLimit);
 
-    const totalPages = Math.ceil(
-      totalProducts / productsLimit
-    );
+    const totalPages = Math.ceil(totalProducts / productsLimit);
 
     return res.status(200).json({
       success: true,
@@ -489,17 +449,12 @@ const getProducts = async (req, res) => {
         totalPages,
         currentPage,
         productsPerPage: productsLimit,
-        hasNextPage:
-          currentPage < totalPages,
-        hasPreviousPage:
-          currentPage > 1,
+        hasNextPage: currentPage < totalPages,
+        hasPreviousPage: currentPage > 1,
       },
     });
   } catch (error) {
-    console.error(
-      "Get Products Error:",
-      error
-    );
+    console.error("Get Products Error:", error);
 
     return res.status(500).json({
       success: false,
